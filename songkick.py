@@ -3,6 +3,8 @@ import json
 import sqlite3
 from bs4 import BeautifulSoup
 import secrets
+import plotly.plotly as py
+import plotly.graph_objs as go
 
 class Artist:
     def __init__(self, artist_id, name, ontour, ontouruntil, uri, d18=None, d17=None, d16=None, d15=None, d14=None):
@@ -19,7 +21,6 @@ class Artist:
 
     def __str__(self):
         return('{} ({} - {}) | On tour: {} | On tour until: {}'.format(self.name, self.artist_id, self.uri, self.ontour, self.ontouruntil))
-        # return('{} ({} - {}) | On tour: {} | On tour until: {} | 2018 concerts: {} | 2017 concerts: {} | 2016 concerts: {} | 2015 concerts: {} | 2014 concerts: {}'.format(self.name, self.artist_id, self.uri, self.ontour, self.ontouruntil, self.d18, self.d17, self.d16, self.d15, self.d14))
 
 ################################################################################
 
@@ -32,22 +33,6 @@ class Concert:
         return('{} {}'.format(self.venue, self.id))
 
 ################################################################################
-
-class Cities:
-    def __init__(self, artist_id, c1, c1num, c2, c2num, c3, c3num, c4, c4num, c5, c5num):
-        self.artist_id = artist_id
-        self.c1 = c1
-        self.c1num = c1num
-        self.c2 = c2
-        self.c2num = c2num
-        self.c3 = c3
-        self.c3num = c3num
-        self.c4 = c4
-        self.c4num = c4num
-        self.c5 = c5num
-
-    def __str__(self):
-        return '{} - {} ({}), {} ({}), {} ({}), {} ({}), {} ({}),'.format(self.artist_id, self.c1, self.c1num, self.c2, self.c2num, self.c3, self.c3num, self.c4, self.c4num, self.c5, self.c5num)
 
 # search for specific artist in api to get songkick id, cache info
 try:
@@ -65,11 +50,9 @@ artist_url = 'http://api.songkick.com/api/3.0/search/artists.json'
 
 def make_artist_request_using_cache(artist):
     if artist in ARTIST_CACHE_DICT:
-        print('Getting data from cache...')
         return ARTIST_CACHE_DICT[artist]
 
     else:
-        print('Requesting new data...')
         resp = get_artist(artist)
         ARTIST_CACHE_DICT[artist] = json.loads(resp.text)
         dumped_json_cache = json.dumps(ARTIST_CACHE_DICT)
@@ -162,16 +145,6 @@ def init_db():
     '''
     cur.execute(statement)
 
-    statement = '''
-        DROP TABLE IF EXISTS 'Cities';
-    '''
-    cur.execute(statement)
-
-    statement = '''
-        DROP TABLE IF EXISTS 'ArtistRelations';
-    '''
-    cur.execute(statement)
-
     conn.commit()
 
     statement = '''
@@ -197,45 +170,7 @@ def init_db():
             'Venue' TEXT
         );
     '''
-    # 'City' TEXT,
-    # 'State' TEXT,
-    # 'Country' TEXT,
-    cur.execute(statement)
 
-    statement = '''
-        CREATE TABLE 'Cities' (
-            'Id' INTEGER PRIMARY KEY AUTOINCREMENT,
-            'ArtistId' INTEGER,
-            'City1' TEXT,
-            'City1Count' INTEGER,
-            'City2' TEXT,
-            'City2Count' INTEGER,
-            'City3' TEXT,
-            'City3Count' INTEGER,
-            'City4' TEXT,
-            'City4Count' INTEGER,
-            'City5' TEXT,
-            'City5Count' INTEGER
-        );
-    '''
-    cur.execute(statement)
-
-    statement = '''
-        CREATE TABLE 'ArtistRelations' (
-            'Id' INTEGER PRIMARY KEY AUTOINCREMENT,
-            'ArtistId' INTEGER,
-            'Band1' TEXT,
-            'Band1Count' INTEGER,
-            'Band2' TEXT,
-            'Band2Count' INTEGER,
-            'Band3' TEXT,
-            'Band3Count' INTEGER,
-            'Band4' TEXT,
-            'Band4Count' INTEGER,
-            'Band5' TEXT,
-            'Band5Count' INTEGER
-        );
-    '''
     cur.execute(statement)
 
     conn.commit()
@@ -313,6 +248,8 @@ def create_artists():
             artist_list.append(Artist(artist_id, display_name, on_tour, on_tour_until, uri, d18, d17, d16, d15, d14))
     return artist_list
 
+################################################################################
+
 def create_concerts():
     f2 = open('concert_data.json', 'r')
     d2 = f2.read()
@@ -347,58 +284,6 @@ def create_concerts():
                 concert_list.append(Concert(location, id))
     return concert_list
 
-def create_cities():
-    f = open('artist_cache.json', 'r')
-    d = f.read()
-    artists_data = json.loads(d)
-    f.close()
-
-    f2 = open('concert_data.json', 'r')
-    d2 = f2.read()
-    concert_data = json.loads(d2)
-    f2.close()
-
-    cities_list = []
-    artist_id = 0
-    c1 = ''
-    c1num = 0
-    c2 = ''
-    c2num = 0
-    c3 = ''
-    c3num = 0
-    c4 = ''
-    c4num = 0
-    c5 = ''
-    c5num = 0
-
-    for x in artists_data:
-        print(x)
-        artist_info = artists_data[x]['resultsPage']['results']['artist'][0]
-        artist_id = artist_info['id']
-
-        for y in concert_data:
-            print(y)
-            specific_artist_url = ''
-            if x.replace(' ', '-') in y:
-                specific_artist_url = y
-            else:
-                continue
-
-            page_soup = BeautifulSoup(concert_data[specific_artist_url], 'html.parser')
-            content_div = page_soup.find(class_="component artist-touring-stats")
-            most_played_div = content_div.find_all(class_="stat")
-            # most_played_div_closer = most_played_div.find()
-            for z in most_played_div:
-                if 'Most played' in z.find('p').text:
-                    closer_look = z.find(class_="info")
-                    cities = closer_look.find_all('li')
-                    for c in cities:
-                        info = c.text.strip().split('\n')
-                        cities_list.append({artist_id: {info[0]: int(info[1][2:(len(info[1])-1)])}})
-            print(cities_list)
-        # most_played = most_played_div.find_all('li')
-        # print(most_played_div)
-
 ################################################################################
 
 def insert_stuff():
@@ -429,114 +314,206 @@ def insert_stuff():
 
     conn.close()
 
-def insert_from_artist():
+################################################################################
+
+def total_concerts_bar_chart(artist_id):
+    d18 = 0
+    d17 = 0
+    d16 = 0
+    d15 = 0
+    d14 = 0
+
     conn = sqlite3.connect('music.db')
     cur = conn.cursor()
 
-    # reading artist cache
-    f = open('artist_cache.json', 'r')
-    d = f.read()
-    artists_data = json.loads(d)
-    f.close()
+    statement = '''
+        SELECT [2018Dates], [2017Dates], [2016Dates], [2015Dates], [2014Dates]
+        FROM Artists
+        WHERE Id = ?
+    '''
+    params = (artist_id,)
 
-    for x in artists_data:
-        artist_info = artists_data[x]['resultsPage']['results']['artist'][0]
-        params = (artist_info['id'], artist_info['displayName'], artist_info['onTourUntil'], artist_info['uri'])
+    cur.execute(statement, params)
 
-        statement = '''
-            INSERT INTO 'Artists' (Id, Name, onTourUntil, uri)
-            VALUES (?, ?, ?, ?)
-        '''
-        cur.execute(statement, params)
-    conn.commit()
+    for x in cur:
+        d18 = x[0]
+        d17 = x[1]
+        d16 = x[2]
+        d15 = x[3]
+        d14 = x[4]
+
+
+    data = [go.Bar(
+            x=['2018', '2017', '2016', '2015', '2014'],
+            y=[d18, d17, d16, d15, d14]
+    )]
+
+    layout = go.Layout(
+    title='Total Concerts for Past 5 Years',
+    )
+
+    fig = go.Figure(data=data, layout=layout)
+
+    py.plot(fig, filename='total_concerts_bar')
+
     conn.close()
 
-def insert_from_concert():
+################################################################################
+
+def total_concerts_line_graph(artist_id):
+    d18 = 0
+    d17 = 0
+    d16 = 0
+    d15 = 0
+    d14 = 0
+
     conn = sqlite3.connect('music.db')
     cur = conn.cursor()
-    # reading concert cache
-    f2 = open('concert_data.json', 'r')
-    d2 = f2.read()
-    concert_data = json.loads(d2)
-    f2.close()
 
-    date = ''
-    location = ''
-    for x in concert_data:
-        print(x)
-        all_gigs_url = x + '/gigography'
-        page_html = make_past_gig_request_using_cache(all_gigs_url)
-        page_soup = BeautifulSoup(page_html, 'html.parser')
+    statement = '''
+        SELECT [2018Dates], [2017Dates], [2016Dates], [2015Dates], [2014Dates]
+        FROM Artists
+        WHERE Id = ?
+    '''
+    params = (artist_id,)
 
-        past_gigs_div = page_soup.find(class_="component events-summary", id='event-listings')
-        past_gigs = past_gigs_div.find_all(class_="event-listings ")
-        for gig in past_gigs:
-            dates = gig.find_all(class_="with-date")
-            for y in dates:
-                date = y.text.strip()
-            location_info = gig.find_all(class_="location")
-            for l in location_info:
-                location_list = l.find_all('span')
-                if ',' in location_list[0].text.strip():
-                    location = 'No venue'
-                else:
-                    location = location_list[0].text.strip()
-                print(location)
-        # all_gigs_url = past_gigs_div.find('a')['href']
+    cur.execute(statement, params)
 
-        # print(past_gigs)
+    for x in cur:
+        d18 = x[0]
+        d17 = x[1]
+        d16 = x[2]
+        d15 = x[3]
+        d14 = x[4]
 
+    data = [go.Scatter(
+        x=['2018', '2017', '2016', '2015', '2014'],
+        y=[d18, d17, d16, d15, d14]
+    )]
 
-    # for x in countries_data:
-    #     params = (None, x['alpha2Code'], x['alpha3Code'], x['name'], x['region'], x['subregion'], x['population'], x['area'])
-    #
-    #     statement = '''
-    #         INSERT INTO 'Countries'
-    #         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    #     '''
-    #     cur.execute(statement, params)
-    #
-    # conn.commit()
-    #
-    # # reading CSV
-    # with open(BARSCSV, encoding = 'utf-8') as csvDataFile:
-    #     csvReader = csv.reader(csvDataFile)
-    #
-    #     for x in csvReader:
-    #         params = (None, x[0], x[1], x[2], x[3], x[4][:-1], x[5], x[6], x[7], x[8], x[5])
-    #
-    #         statement = '''
-    #             INSERT INTO Bars (Id, Company, SpecificBeanBarName, REF, ReviewDate, CocoaPercent, CompanyLocation, CompanyLocationId, Rating, BeanType, BroadBeanOrigin, BroadBeanOriginId)
-    #             SELECT ?, ?, ?, ?, ?, ?, ?, Countries.Id, ?, ?, ?, Countries.Id
-    #             FROM Countries
-    #             WHERE Countries.EnglishName = ?
-    #         '''
-    #         cur.execute(statement, params)
-    #
-    #         statement = '''
-    #             UPDATE Bars
-    #             SET BroadBeanOriginId = (
-    #                 SELECT Id
-    #                 FROM Countries
-    #                 WHERE Countries.EnglishName = ?
-    #             )
-    #             WHERE BroadBeanOrigin = ?
-    #         '''
-    #         params = (x[8], x[8])
-    #         cur.execute(statement, params)
-    #
-    # conn.commit()
-    # conn.close()
+    layout = go.Layout(
+    title='Total Concerts for Past 5 Years',
+    )
 
+    fig = go.Figure(data=data, layout=layout)
 
-user_input = input('gimmie a band boyo: ')
-while user_input != 'exit':
-    make_artist_request_using_cache(user_input)
-    (make_concert_request_using_cache(user_input))
-    user_input = input('gimmie a band boyo: ')
-create_artists()
-create_concerts()
-init_db()
-insert_stuff()
-# for x in create_concerts():
-#     print(x)
+    py.plot(fig, filename='total-concerts-line')
+
+    conn.close()
+
+################################################################################
+
+def most_freq_venues_bar_chart(artist_id):
+    conn = sqlite3.connect('music.db')
+    cur = conn.cursor()
+
+    xdata = []
+    ydata = []
+
+    statement = '''
+        SELECT Venue, COUNT(Venue)
+        From Concerts
+        WHERE ArtistId = ?
+        GROUP BY Venue
+        ORDER BY COUNT(Venue) DESC
+        LIMIT 5
+    '''
+    params = (artist_id,)
+
+    cur.execute(statement, params)
+
+    for x in cur:
+        xdata.append(x[0])
+        ydata.append(x[1])
+
+    data = [go.Bar(
+            x=xdata,
+            y=ydata
+    )]
+
+    layout = go.Layout(
+    title='5 Most Frequent Venues',
+    )
+
+    fig = go.Figure(data=data, layout=layout)
+
+    py.plot(fig, filename='most-freq-venues-bar')
+
+    conn.close()
+
+################################################################################
+
+def least_freq_venues_bar_chart(artist_id):
+    conn = sqlite3.connect('music.db')
+    cur = conn.cursor()
+
+    xdata = []
+    ydata = []
+
+    statement = '''
+        SELECT Venue, COUNT(Venue)
+        From Concerts
+        WHERE ArtistId = ?
+        GROUP BY Venue
+        ORDER BY COUNT(Venue) ASC
+        LIMIT 5
+    '''
+    params = (artist_id,)
+
+    cur.execute(statement, params)
+
+    for x in cur:
+        xdata.append(x[0])
+        ydata.append(x[1])
+
+    data = [go.Bar(
+            x=xdata,
+            y=ydata
+    )]
+
+    layout = go.Layout(
+    title='5 Least Frequent Venues',
+    )
+
+    fig = go.Figure(data=data, layout=layout)
+
+    py.plot(fig, filename='least-freq-venues-bar')
+
+    conn.close()
+
+################################################################################
+# uncomment lines that are commented out to make fresh caches and db
+def user_interaction():
+    user_input = input('Type in a band/artist name or "exit" to quit:  ')
+    while user_input != 'exit':
+        # make_artist_request_using_cache(user_input)
+        # make_concert_request_using_cache(user_input)
+        artist_id = get_artist_id(user_input)
+        user_command = input('Select a graph to be displayed or type "exit" to select a different artist:\n1. Bar chart of total concerts \n2. Line graph of total concerts \n3. Bar chart of most frequently played venues \n4. Bar chart of least frequently played venues\n')
+        while user_command != 'exit':
+            if user_command == '1':
+                total_concerts_bar_chart(artist_id)
+            elif user_command == '2':
+                total_concerts_line_graph(artist_id)
+            elif user_command == '3':
+                most_freq_venues_bar_chart(artist_id)
+            elif user_command == '4':
+                least_freq_venues_bar_chart(artist_id)
+            else:
+                print('Bad input. Try again')
+
+            user_command = input('Select a graph to be displayed or type "new" to select a different artist:\n1. Bar chart of total concerts \n2. Line graph of total concerts \n3. Bar chart of most frequently played venues \n4. Bar chart of least frequently played venues\n')
+        user_input = input('Type in a band/artist name or "exit" to quit:  ')
+
+    # create_artists()
+    # create_concerts()
+    # init_db()
+    # insert_stuff()
+
+# graph1: total concerts bar chart
+# graph2: total concerts line graph
+# graph3: 5 most frequent venues bar chart
+# graph4: 5 least frequent venues bar chart
+
+if __name__=="__main__":
+    user_interaction()
