@@ -510,10 +510,6 @@ def user_interaction():
     # init_db()
     # insert_stuff()
 
-# graph1: total concerts bar chart
-# graph2: total concerts line graph
-# graph3: 5 most frequent venues bar chart
-# graph4: 5 least frequent venues bar chart
 
 if __name__=="__main__":
     user_interaction()
